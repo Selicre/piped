@@ -1,0 +1,18 @@
+[package]
+name = "piped"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+clipboard = "0.5"
+glow = "0.10"
+glutin = "0.28"
+image = { version = "0.23", default-features = false, features = [ "png" ] }
+imgui = { path = "../imgui-rs/imgui", features = ["tables-api", "freetype", "docking"] }
+imgui-sys = { path = "../imgui-rs/imgui-sys" }
+imgui-glow-renderer = { path = "../imgui-rs/imgui-glow-renderer" }
+imgui-winit-support = { path = "../imgui-rs/imgui-winit-support" }
+snesgfx = { path = "../snesgfx" }
+wdc65816 = { path = "../wdc65816" }

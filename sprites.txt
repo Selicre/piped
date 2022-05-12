@@ -1,0 +1,180 @@
+Unused Sprite
+Unused Sprite
+Unused Sprite
+Unused Sprite
+Unused Sticky Sprite
+Unused Bouncy Enemy
+Vertical Bounce Sprite
+Secret Toad House Warp
+Invisible P Switch Door
+Airship Anchor
+Unused Pushable Block
+1-up Mushroom
+Bouncing Power Ups
+Mushroom
+Koopa Kid
+Unused Sprite
+Unused Sprite
+Unused Sprite
+Unused Sprite
+Unused Sprite
+Unused Sprite
+Unused Sprite
+Unused Sprite
+Spiny Cheep-Cheep
+Bowser
+Fire Flower
+Unknown Sprite
+Horizontal Bounce Sprite
+Unused Strange Reward Block
+Unused Sprite
+Raccoon Leaf
+Vine Head
+Unused Sprite
+Unused Mushroom Card Item
+Unused Flower Card Item
+Unused Star Card Item
+Fast Left Moving Cloud Platform
+Overworld Pipe Level Controller
+Right Flying Wood Platform
+Fized Horizontal Movement Wood Platform
+Fized Vertical Movement Wood Platform
+Spike
+Ptooie
+Kuribos Shoe
+Slow Left Moving Cloud Platform
+Boss Bass
+Elevator Platform
+Boo
+Following Hot Foot
+Rightside Up Stretch
+Upside Down Stretch
+Nipper Plant
+Toad House Toad
+Toad House Chest Item
+Left Flying Wood Platform That Falls
+Fixed Horizontal Movement Wood Platform
+Fixed Vertical Movement Wood Platform
+Hopping Nipper Plant
+Line Guided Donut Platform
+Following Cheep Cheep
+Line Guided Wood Platform
+Fire Breathing Nipper
+Buoyant Platform
+Dry Bones
+Buster Beetle
+End Of Level Card
+3-Spot Hopping Red Cheep Cheep
+2-Spot Hopping Red Cheep Cheep
+Falling Wood Platform
+Wandering Hot Foot
+Blowing Piranha Plant
+Giant Block Handler
+Mini Boss Bass
+BG Cloud
+Goal Sphere
+Boom Boom
+Flying Boom Boom
+Unused Sprite
+Unused Sprite
+Free Chain Chomp
+Bob Omb
+Double Counterclockwise Roto Disc
+Mini Chest
+Upside Down Podoboo
+Donut Block
+Windup Bob-Omb
+Left Facing Sideways Piranha Plant
+Right Facing Sideways Piranha Plant
+Fire Chomp
+Fire Snake
+Single Clockwise Roto Disc
+Single Counterclockwise Roto Disc
+Throw Block
+Whirlwind
+Double Horizontal Crossing Roto Disc
+Double Vertical Crossing Roto Disc
+Double Clockwise Roto Disc
+Following Blooper Nanny
+Blooper
+Big Bertha
+Water Hopping Red Cheep Cheep
+Upwards Air Current
+Downwards Air Current
+Lava Lotus
+Upside Down Buzzy Beetle
+Upside Down Spiny
+Launching Blooper Nanny
+Jumping Fake Brick
+Green Koopa
+Red Koopa
+Bouncing Green Parakoopa
+Vertical Red Para Koopa
+Buzzy Beetle
+Spiny
+Goomba
+Hopping Red Goomba
+Paragoomba
+Boss Projectile
+Flying Red Cheep Cheep
+Green Cheep Cheep
+Bullet Bill
+Homing Bill
+Giant Green Koopa
+Giant Red Koopa
+Giant Goomba
+Giant Piranha Plant In Small Pipe
+Bouncing Giant Green Parakoopa
+Giant Piranha Plant In Giant Pipe
+Horizontal Green Parakoopa
+Hammer Bro
+Boomerang Bro
+Lakitu
+Red Spiny Egg
+Green Spiny Egg
+Sledge Bro
+Fire Bro
+Yellow Wavy Cheep Cheep
+Chain Chomp
+Normal Thwomp
+Left Moving Thwomp
+Right Moving Thwomp
+Fixed Vertical Movement Thwomp
+Fixed Diagonal TL To BR Movement Thwomp
+Fixed Diagonal TR To BL Movement Thwomp
+Weighted Pea Platform
+Auto Rotating Pea Platform
+Clockwise Rotating Pea Platform
+Counterclockwise Rotating Pea Platform
+Giant Question Mark Block With Three1ups
+Giant Question Mark Block With Mushroom
+Giant Question Mark Block With Fire Flower
+Giant Question Mark Block With Raccoon Leaf
+Giant Question Mark Block With Tanooki Suit
+Giant Question Mark Block With Frog Suit
+Giant Question Mark Block With Hammer Suit
+Unused Sprite
+Unused Sprite
+Upward Facing Fire Jet
+Podoboo
+Parabuzzy
+Green Classic Piranha Plant
+Upside Down Red Classic Piranha Plant
+Red Classic Piranha Plant
+Upside Down Red Classic Piranha Plant
+Green Venus Fire Trap
+Upside Down Red Venus Fire Trap
+Red Venus Fire Trap
+Upside Down Red Venus Fire Trap
+Static Outline Platform
+Switchable Outline Platform
+Airship Propeller
+Unused Sprite
+Leftward Facing Fire Jet
+Rocky Wrench
+Metal Lugnut
+Angry Sun
+Big Cannon Ball
+Rightward Facing Fire Jet
+Downward Facing Fire Jet
+Unused Sprite
