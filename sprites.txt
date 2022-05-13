@@ -37,8 +37,8 @@ Unused Star Card Item
 Fast Left Moving Cloud Platform
 Overworld Pipe Level Controller
 Right Flying Wood Platform
-Fized Horizontal Movement Wood Platform
-Fized Vertical Movement Wood Platform
+Fixed Horizontal Movement Wood Platform
+Fixed Vertical Movement Wood Platform
 Spike
 Ptooie
 Kuribos Shoe
@@ -178,3 +178,38 @@ Big Cannon Ball
 Rightward Facing Fire Jet
 Downward Facing Fire Jet
 Unused Sprite
+Flying Cheep Cheep Generator
+Spiny Cheep Cheep Generator
+Disable Generators And Lakitu
+Green Parabuzzy Generator
+BG Cloud Generator
+Left Flying Wood Platform That Falls Generator
+Spawn Mini Chest
+Disable Generators
+Bullet Bill Launcher
+Homing Bill Launcher
+Rocky Wrench Spawner
+Rotating Cannonball Shooter
+Left Facing Pipe Spawning Goombas
+Right Facing Pipe Spawning Goombas
+Left Facing Cannon
+Left Facing Big Cannon
+Up Left Facing Cannon
+Up Right Facing Cannon
+Down Left Facing Cannon
+Down Right Facing Cannon
+Up Left Facing Cannon
+Up Right Facing Cannon
+Down Left Facing Cannon
+Down Right Facing Cannon
+Right Facing Cannon
+Right Facing Big Cannon
+Left Facing Bob Omb Cannon
+Right Facing Bob Omb Cannon
+Laser Bowser Statue
+Spawn 3 Green Parabuzzies
+Spawn 3 Yellow Cheep Cheeps
+Activate Auto Scrolling
+Coin Ship And Blue Toad House Decision Controller
+Toad And King
+Set Mini Chest Item

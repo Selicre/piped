@@ -1,4 +1,4 @@
-#version 460
+#version 400
 layout (location = 0) in ivec4 position;
 
 uniform vec2 screen_size;

@@ -1,4 +1,4 @@
-#version 460
+#version 400
 layout(points) in;
 in int v_tile_id[1];
 in int v_params[1];

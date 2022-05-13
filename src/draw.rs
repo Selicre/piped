@@ -11,7 +11,8 @@ pub fn register(f: impl FnOnce() + 'static) {
     unsafe {
         let f = Box::new(Box::new(f) as Box<dyn FnOnce()>);
         let dl = sys::igGetWindowDrawList();
-        sys::ImDrawList_AddCallback(dl, Some(callback), Box::into_raw(f) as _);
+        let f = Box::into_raw(f);
+        sys::ImDrawList_AddCallback(dl, Some(callback), f as _);
     }
 }
 
@@ -19,6 +20,42 @@ unsafe extern "C" fn callback(parent_list: *const ImDrawList, cmd: *const ImDraw
     let f = Box::<Box<dyn FnOnce()>>::from_raw((*cmd).UserCallbackData as _);
     f();
 }
+/*
+// Alternate impl in case the other one does weird shit
+use std::collections::HashMap;
+use std::any::TypeId;
+use std::mem::MaybeUninit;
+
+static mut CUR_CB: usize = 0;
+static mut CALLBACKS: MaybeUninit<HashMap<usize,Box<dyn FnOnce()>>> = MaybeUninit::uninit();
+
+pub fn register(f: impl FnOnce() + 'static) {
+    unsafe {
+        // init map
+        if CUR_CB == 0 {
+            CALLBACKS.write(HashMap::new());
+        }
+        CUR_CB += 1;
+        println!("{}", CALLBACKS.assume_init_mut().len());
+        let f = Box::new(f) as Box<dyn FnOnce()>;
+        CALLBACKS.assume_init_mut().insert(CUR_CB, f);
+        let dl = sys::igGetWindowDrawList();
+        sys::ImDrawList_AddCallback(dl, Some(callback), CUR_CB as _);
+        CUR_CB += 1;
+    }
+}
+
+unsafe extern "C" fn callback(parent_list: *const ImDrawList, cmd: *const ImDrawCmd) {
+    
+    let data = ((*cmd).UserCallbackData as _);
+    if let Some(f) = CALLBACKS.assume_init_mut().remove(&data) {
+        f();
+    } else {
+        println!("uhh no {}", data);
+    }
+    //let f = Box::<Box<dyn FnOnce()>>::from_raw((*cmd).UserCallbackData as _);
+    //f();
+}*/
 
 pub fn reset() {
     unsafe {
@@ -134,7 +171,7 @@ impl GlData {
             gl.uniform_2_f32(u.as_ref(), offset[0], offset[1]);
             gl.bind_vertex_array(Some(vao));
             gl.bind_buffer(glow::ARRAY_BUFFER, Some(vbo));
-            gl.buffer_data_u8_slice(glow::ARRAY_BUFFER, data.align_to().1, glow::STATIC_DRAW);
+            gl.buffer_data_u8_slice(glow::ARRAY_BUFFER, data.align_to().1, glow::DYNAMIC_DRAW);
             gl.scissor(min.x as _, (window_size[1] as f32 - max.y) as _, (max.x-min.x) as _, (max.y-min.y) as _);
             gl.draw_arrays(glow::POINTS, 0, data.len() as _);
         });

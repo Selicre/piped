@@ -1,4 +1,4 @@
-#version 460
+#version 400
 flat in int g_tile_id;
 flat in int g_params;
 in vec2 g_tex_coords;
@@ -57,7 +57,7 @@ void main() {
 		out_color = mix(out_color, color_sel, 0.4);
 		out_color.b += 0.4;
     } else if (sel == 2) {
-    	vec4 color_sel = vec4(1.0,0.5,0.5,1.0);
+    	vec4 color_sel = vec4(1.0,0.5,0.5,0.4);
     	if (px == 0) { out_color = vec4(0,0,0,0); }
 		out_color = mix(out_color, color_sel, 0.4);
 		out_color.r += 0.4;

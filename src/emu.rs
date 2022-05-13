@@ -176,6 +176,7 @@ pub fn render_area(rom: &[u8], params: [u32; 4], cy_limit: u64, obj_limit: usize
             }
         }
         if cpu.pc == 0x9AA5 && cpu.pbr == 0x20 {
+            cy = 0;
             objects += 1;
             if objects > obj_limit {
                 cpu.pc = 0x9AEE;
@@ -201,7 +202,7 @@ pub fn render_area(rom: &[u8], params: [u32; 4], cy_limit: u64, obj_limit: usize
     (cpu.mem.wram, cpu.mem.vram, obj_list)
 }
 
-pub fn render_area_edit(rom: &[u8], params: [u32; 4], obj_src: &[(u32, Vec<u8>)], cy_limit: u64, obj_limit: usize) -> (Vec<u8>, Vec<u8>, Vec<(u32, Vec<u32>)>) {
+pub fn render_area_edit(rom: &[u8], params: [u32; 4], obj_src: &[(u32, Vec<u8>)], cy_limit: u64, obj_limit: usize) -> (Vec<u8>, Vec<u8>, Vec<(u32, Vec<u32>,usize)>) {
     let now = std::time::Instant::now();
     let mut mem = CheckedMem {
         cart: rom.to_vec(),
@@ -229,7 +230,7 @@ pub fn render_area_edit(rom: &[u8], params: [u32; 4], obj_src: &[(u32, Vec<u8>)]
 
     let mut obj_idx = 0;
     let mut cur_obj = vec![];
-    let mut obj_list: Vec<(u32,Vec<u32>)> = vec![];
+    let mut obj_list: Vec<(u32,Vec<u32>,usize)> = vec![];
 
     let mut cpu = Cpu::new(mem);
     cpu.emulation = false;
@@ -237,6 +238,7 @@ pub fn render_area_edit(rom: &[u8], params: [u32; 4], obj_src: &[(u32, Vec<u8>)]
     cpu.pc = 0x86FB;
     cpu.pbr = 0x20;
     cpu.dbr = 0x21;
+    let mut last_ptr = 0;
     //cpu.trace = true;
     let mut cy = 0;
     let mut in_objects = false;
@@ -262,6 +264,7 @@ pub fn render_area_edit(rom: &[u8], params: [u32; 4], obj_src: &[(u32, Vec<u8>)]
             if obj_idx == obj_src.len() {
                 in_objects = false;
                 if let Some(c) = obj_list.last_mut() {
+                    c.2 = obj - last_ptr;
                     c.1 = std::mem::take(&mut cur_obj);
                 }
                 // terminator 2
@@ -269,9 +272,11 @@ pub fn render_area_edit(rom: &[u8], params: [u32; 4], obj_src: &[(u32, Vec<u8>)]
             } else {
                 cpu.mem.extram[obj..obj+obj_src[obj_idx].1.len()].copy_from_slice(&obj_src[obj_idx].1);
                 if let Some(c) = obj_list.last_mut() {
+                    c.2 = obj - last_ptr;
                     c.1 = std::mem::take(&mut cur_obj);
                 }
-                obj_list.push((obj_src[obj_idx].0, vec![]));
+                last_ptr = obj;
+                obj_list.push((obj_src[obj_idx].0, vec![], 0));
                 obj_idx += 1;
             }
         }
