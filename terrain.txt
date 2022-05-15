@@ -1,0 +1,90 @@
+# 0 S
+Bush Set 1
+Bush Set 2
+Bush Set 3
+Nothing/Unknown
+Door
+Odd Door Tile
+Vine to Floor
+Odd Bush Tile
+X
+X
+X
+X
+X
+X
+X
+X
+? Block
+? Block
+? Block
+? Block
+? Block
+Muncher
+Brick Block
+Brick Block
+Brick Block
+Brick Block
+Brick Block
+Brick Block
+Brick Block
+Brick Block
+Some Invisible Shit
+Some Invisible Shit
+Some Invisible Shit
+Note Block
+Note Block
+Note Block
+Wood Block
+Wood Block
+Wood Block
+More Invisible Shit
+P-Switch
+End of Level (place at y=0!)
+# 0 R
+Ground Block (White)
+Ground Block (Orange)
+Ground Block (Green)
+Ground Block (Blue)
+Floating Block (White)
+Floating Block (Orange)
+Floating Block (Green)
+Floating Block (Blue)
+Small Bushes
+Pit
+Clouds
+Ground
+Ground (Palette 2)
+No Clue Tbh
+Pit (Palette 2)
+Bricks
+Question Blocks
+uhh Bricks?
+Wood Blocks
+Note Blocks
+Note Blocks (Palette 2)
+Wood Blocks (?)
+Coins
+Down Pipe
+Down Pipe (Subworld)
+Down Pipe (Exit)
+Up Pipe
+Up Pipe (Exit)
+Right Pipe (Exit)
+Right Pipe
+Left Pipe (Exit)
+Left Pipe
+Bullet Bill Blaster
+Bridge
+P-Switch Coins
+Waterfall
+Water
+Water 2
+Water (No Current)
+Unknown
+Brick Wall
+Quicksand
+Underwater blocks?
+Throw Blocks
+Screen-Scrolling Pipe
+Clouds 2
