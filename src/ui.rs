@@ -13,8 +13,26 @@ pub struct MainWindow {
     pub gl_data: GlData,
     proj_view: ProjectView,
     sprmap: SpriteMapEdit,
+    help: bool
 }
 
+const HELP: &str =
+r#"Piped v0.2 user "manual"
+d: switch terrain/entities
+e: export level to export.asm (will not be written to the rom, use asar)
+f: load sublevel (warning: can crash)
+Terrain editing:
+z/x: cycle ID (mostly the type of object)
+a/s: cycle metadata (mostly width or height)
+b/n: cycle extra byte (mostly width of long objects)
+c: show block mappings
+v: show vram
+numpad+/numpad-: change zoom
+
+Placed terrain format: [bank] [id] [extra bytes..]
+Note: terrain names only valid for the first tileset. Will be broken elsewhere.
+There's also no undo yet, be careful.
+"#;
 
 impl MainWindow {
     pub fn new() -> Self {
@@ -26,6 +44,7 @@ impl MainWindow {
             sprmap: SpriteMapEdit::new(),
             rom,
             gl_data: Default::default(),
+            help: false,
         }
     }
     pub fn show_window(&mut self, ui: &Ui, gl: &Ctx) -> bool {
@@ -38,6 +57,11 @@ impl MainWindow {
             self.levels.push(Level::new(format!("{c:06X?}"), c));
         }
         self.levels.retain_mut(|c| c.show(ui, gl, &self.gl_data));
+        if self.help {
+            ui.window("Help").opened(&mut self.help).build(|| {
+                ui.text(HELP);
+            });
+        }
         false
     }
     pub fn menubar(&mut self, ui: &Ui) -> bool {
@@ -86,6 +110,7 @@ impl MainWindow {
                 menu!("Select All", "Ctrl-A", { });
                 menu!("Deselect All", "Ctrl-Shift-A", { });
             });
+            menu!("Help", { self.help = true; });
         });
         quit
     }
@@ -415,6 +440,50 @@ impl SpriteMapEdit {
     }
 }
 
+#[derive(Debug)]
+pub struct Terrain {
+    pub is_meta: bool,
+    pub x: u8,
+    pub y: u8,
+    pub id: u8,
+    pub meta: u8,
+}
+impl Terrain {
+    pub fn parse(c: &[u8]) -> Self {
+        if c[2] < 0x10 {
+            Self {
+                is_meta: false,
+                x: c[1],
+                y: c[0] & 0x1F,
+                id: (c[0] >> 5) * 0x10 + (c[2]),
+                meta: 0
+            }
+        } else {
+            Self {
+                is_meta: true,
+                x: c[1],
+                y: c[0] & 0x1F,
+                id: (c[0] >> 5) * 0xF + ((c[2] - 0x10) >> 4),
+                meta: c[2] & 0x0F
+            }
+        }
+    }
+    pub fn ser(&self) -> [u8;3] {
+        let &Self { x,y,id,meta,.. } = self;
+        if self.is_meta {
+            [y|((id/0xF)<<5),x,((id%0xF) << 4) + meta + 0x10]
+        } else {
+            [y|((id/0x10)<<5),x,id%0x10]
+        }
+    }
+    pub fn show(&self) -> String {
+        if self.is_meta {
+            format!("{:02X}:{:02X}:M{:02X}:{:01X}", self.x, self.y, self.id, self.meta)
+        } else {
+            format!("{:02X}:{:02X}:S{:02X}", self.x, self.y, self.id)
+        }
+    }
+}
 
 
 #[derive(Default)]
@@ -440,7 +509,7 @@ pub struct Level {
     entity_selection: HashSet<u32>,
     scale: f32,
     placed_obj: String,
-    placed_ent: String,
+    placed_ent: usize,
     cur_obj_id: u32,
     cur_ent_id: u32,
 }
@@ -460,8 +529,23 @@ impl Level {
         this.init_decomp();
         this
     }
+    pub fn load_sublevel(&mut self) {
+        use std::convert::TryInto;
+        let h = self.params[2];
+        let ptr: &[u8;4] = (self.rom[addr_to_file(h)..][..4]).try_into().unwrap();
+        self.params[2] = u32::from_le_bytes(*ptr) & 0xFFFFFF;
+        let ptr: &[u8;4] = (self.rom[addr_to_file(h+3)..][..4]).try_into().unwrap();
+        self.params[3] = u32::from_le_bytes(*ptr) & 0xFFFFFF;
+        self.params[0] = self.wram[0x1EBA] as _;
+        self.params[1] = self.wram[0x1EBA] as _;
+        self.selection.clear();
+        self.entity_selection.clear();
+        self.init_decomp();
+    }
     pub fn init_decomp(&mut self) {
         let (_,_,obj) = crate::emu::render_area(&self.rom, self.params, 1000000, usize::MAX);
+        self.obj_set.clear();
+        self.entities.clear();
         for (idx,i) in obj.windows(2).enumerate() {
             self.obj_set.push((idx as _, self.rom[addr_to_file(i[0].0)..addr_to_file(i[1].0)].to_vec()));
         }
@@ -478,6 +562,12 @@ impl Level {
     pub fn decompress(&mut self) {
         let (wram, vram, obj) = crate::emu::render_area_edit(&self.rom, self.params, &self.obj_set, 1000000, usize::MAX);
         self.wram = wram; self.vram = vram; self.obj = obj;
+
+        for ((_,_,len),(_,e)) in self.obj.iter().zip(self.obj_set.iter_mut()) {
+            if e.len() < *len {
+                e.resize(*len, 0);
+            }
+        }
         self.redraw_objects();
         self.redraw_entities();
     }
@@ -647,6 +737,7 @@ impl Level {
         }
         out.pop(); out.pop(); writeln!(out);
 
+        self.entities.sort_by_key(|c| c.1[1]);
         for (i,v) in self.entities.iter() {
             write!(out, "\tdb ");
             for i in v {
@@ -665,7 +756,7 @@ impl Level {
         let scale = self.scale;
         let mut close = true;
         let _id = ui.push_id_ptr(self);
-        ui.window(format!("Level {}###{:p}", self.name, self)).horizontal_scrollbar(true).opened(&mut close).build(|| {
+        ui.window(format!("Level {}###LevelView", self.name)).horizontal_scrollbar(true).opened(&mut close).build(|| {
             // middle click pan
             if ui.is_window_focused() && ui.is_mouse_dragging(imgui::MouseButton::Middle) {
                 ui.set_scroll_x(ui.scroll_x() - ui.io().mouse_delta[0]);
@@ -678,18 +769,29 @@ impl Level {
             let edit_ter = ui.is_item_hovered() && self.mode == 0;
             let edit_ent = ui.is_item_hovered() && self.mode == 1;
             ui.set_cursor_pos(cur);
-            if ui.is_key_index_pressed(glutin::event::VirtualKeyCode::C as i32) {
+            if ui.is_item_hovered() && ui.is_key_index_pressed(glutin::event::VirtualKeyCode::C as i32) {
                 self.redraw_mappings();
             }
-            if ui.is_key_index_pressed(glutin::event::VirtualKeyCode::V as i32) {
+            if ui.is_item_hovered() && ui.is_key_index_pressed(glutin::event::VirtualKeyCode::V as i32) {
                 self.redraw_spr();
             }
-            if ui.is_item_hovered() && ui.is_key_index_pressed(glutin::event::VirtualKeyCode::D as i32) {
+            if ui.is_window_focused() && ui.is_key_index_pressed(glutin::event::VirtualKeyCode::D as i32) {
                 self.mode ^= 1;
             }
-            if ui.is_item_hovered() && ui.is_key_index_pressed(glutin::event::VirtualKeyCode::E as i32) {
-                //save
+            if ui.is_window_focused() && ui.is_key_index_pressed(glutin::event::VirtualKeyCode::NumpadAdd as i32) {
+                self.scale *= 2.0;
+                self.update = true;
+            }
+            if ui.is_window_focused() && ui.is_key_index_pressed(glutin::event::VirtualKeyCode::NumpadSubtract as i32) {
+                self.scale /= 2.0;
+                self.update = true;
+            }
+            if ui.is_window_focused() && ui.is_key_index_pressed(glutin::event::VirtualKeyCode::E as i32) {
                 self.save();
+            }
+            if ui.is_window_focused() && ui.is_key_index_pressed(glutin::event::VirtualKeyCode::F as i32) {
+                self.load_sublevel();
+                self.update = true;
             }
             let c = self.blocks.clone();
             gl_data.upload_color(gl, &self.wram[0x1300..]);
@@ -710,13 +812,33 @@ impl Level {
             if ui.is_mouse_released(imgui::MouseButton::Left) {
                 self.update = true;
             }
+            let terrain_text = include_str!("../terrain.txt");
             if self.mode == 0 {
                 let cursor = [cur[0] + ui.scroll_x(), cur[1] + ui.scroll_y()];
                 ui.set_cursor_pos(cursor);
                 ui.group(|| {
                     ui.text("Editing terrain");
                     ui.set_next_item_width(200.0);
-                    ui.input_text("Placed", &mut self.placed_obj).build();
+                    ui.input_text("Placed Terrain Data", &mut self.placed_obj).build();
+                    ui.set_next_item_width(200.0);
+                    if let Some(c) = ui.begin_combo_no_preview("Placed Terrain Selector") {
+                        let mut is_meta = false;
+                        let mut id = 0;
+                        for i in terrain_text.lines() {
+                            if i == "# 0 S" { continue; }
+                            if i == "# 0 R" { is_meta = true; id = 0; continue; }
+                            if ui.selectable(format!("{:02X} {}", id, i)) {
+                                let c = Terrain { is_meta, id, x: 0, y: 0, meta: 4 }.ser();
+                                self.placed_obj = format!("{:01X} {:02X}", c[0] >> 5, c[2]);
+                            }
+                            id += 1;
+                        }
+                    }
+                    for (i,c) in self.obj_set.iter_mut() {
+                        if self.selection.contains(i) {
+                            ui.text(format!("{} {:02X?}", Terrain::parse(c).show(), &c[3..]));
+                        }
+                    }
                 });
             }
             let names = include_str!("../sprites.txt");
@@ -726,12 +848,15 @@ impl Level {
                 ui.group(|| {
                     ui.text("Editing entities");
                     ui.set_next_item_width(200.0);
-                    ui.input_text("Placed", &mut self.placed_ent).build();
-                    let name = match u8::from_str_radix(&self.placed_ent,16) {
+                    //ui.input_text("Placed", &mut self.placed_ent).build();
+                    /*let name = match u8::from_str_radix(&self.placed_ent,16) {
                         Ok(c) => format!("{c:02X} {}", names.lines().nth(c as _).unwrap_or("OOB")),
                         Err(e) => format!("{e:?}"),
-                    };
-                    ui.text(name);
+                    };*/
+                    ui.combo_simple_string("Placed entity", &mut self.placed_ent,
+                        &names.lines().enumerate().map(|(i,c)| format!("{:02X} {}",i,c)).collect::<Vec<_>>()
+                    );
+                    //ui.text(name);
                 });
             }
             // EDIT ENTITIES
@@ -750,7 +875,7 @@ impl Level {
                 if ui.is_mouse_clicked(imgui::MouseButton::Left) {
                     let mut clicked = false;
                     for &(i,[id,x,y]) in self.entities.iter().rev() {
-                        if x as u32 == sel_x && y as u32 == sel_y {
+                        if x as u32 == sel_x && (y as u32) & 0x1F == sel_y {
                             if !ui.io().key_ctrl && !self.entity_selection.contains(&i) {
                                 self.entity_selection.clear();
                             }
@@ -766,13 +891,11 @@ impl Level {
                     }
                 }
                 if ui.is_mouse_clicked(imgui::MouseButton::Right) {
-                    if let Ok(c) = u8::from_str_radix(&self.placed_ent,16) {
-                        self.entities.push((self.cur_ent_id, [c,sel_x as u8,sel_y as u8]));
-                        self.entity_selection.clear();
-                        self.entity_selection.insert(self.cur_ent_id);
-                        self.cur_ent_id += 1;
-                        self.update = true;
-                    }
+                    self.entities.push((self.cur_ent_id, [self.placed_ent as u8,sel_x as u8,sel_y as u8]));
+                    self.entity_selection.clear();
+                    self.entity_selection.insert(self.cur_ent_id);
+                    self.cur_ent_id += 1;
+                    self.update = true;
                 }
                 // drag
                 if ui.is_mouse_dragging(imgui::MouseButton::Left) {
@@ -797,10 +920,15 @@ impl Level {
                     self.entities.retain(|(i,_)| !self.entity_selection.contains(i));
                     self.update = true;
                 }
+            } else if self.mode == 1 && ui.is_window_hovered() {  // deselect
+                if ui.is_mouse_clicked(imgui::MouseButton::Left) && !ui.io().key_ctrl {
+                    self.entity_selection.clear();
+                    self.update = true;
+                }
             }
 
             // EDIT TERRAIN
-            if edit_ter {
+            if edit_ter && sel_y < 0x1B {
                 let page = sel_x >> 4;
                 let inner = sel_x & 0xF;
                 let blockp = (page * 0x1B0 + sel_y * 0x10 + inner) as usize;
@@ -812,7 +940,7 @@ impl Level {
                         for (addr,c,_) in self.obj.iter() {
                             if c.contains(&(blockp as u32 + 0x7E2000)) {
                                 let c = &mut self.obj_set.iter_mut().find(|c| c.0 == *addr).unwrap().1;
-                                ui.text(format!("Object {:02X?} @ {:02X}", &c, addr));
+                                ui.text(format!("{} @ {:02X}", Terrain::parse(&c).show(), addr));
                             }
                         }
                     });
@@ -835,7 +963,11 @@ impl Level {
                         self.update = true;
                     }
                 }
-
+            } else if self.mode == 0 && ui.is_window_hovered() {  // deselect
+                if ui.is_mouse_clicked(imgui::MouseButton::Left) && !ui.io().key_ctrl {
+                    self.selection.clear();
+                    self.update = true;
+                }
             }
 
             fn parse(x: u8, y: u8, s: &str) -> Option<Vec<u8>> {
@@ -866,7 +998,9 @@ impl Level {
                 if ui.is_key_pressed(imgui::Key::Z) {
                     for (addr,c) in self.obj_set.iter_mut() {
                         if self.selection.contains(addr) {
-                            c[2] -= 1;
+                            let mut t = Terrain::parse(c);
+                            t.id -= 1;
+                            c[..3].copy_from_slice(&t.ser());
                             self.update = true;
                         }
                     }
@@ -874,7 +1008,9 @@ impl Level {
                 if ui.is_key_pressed(imgui::Key::X) {
                     for (addr,c) in self.obj_set.iter_mut() {
                         if self.selection.contains(addr) {
-                            c[2] += 1;
+                            let mut t = Terrain::parse(c);
+                            t.id += 1;
+                            c[..3].copy_from_slice(&t.ser());
                             self.update = true;
                         }
                     }
@@ -882,9 +1018,10 @@ impl Level {
                 if ui.is_key_pressed(imgui::Key::A) {
                     for (addr,c) in self.obj_set.iter_mut() {
                         if self.selection.contains(addr) {
-                            let mut bank = c[0] >> 5;
-                            bank -= 1;
-                            c[0] = (c[0] & 0x1F) | (bank << 5);
+                            let mut t = Terrain::parse(c);
+                            t.meta -= 1;
+                            t.meta &= 0x0F;
+                            c[..3].copy_from_slice(&t.ser());
                             self.update = true;
                         }
                     }
@@ -892,10 +1029,31 @@ impl Level {
                 if ui.is_key_index_pressed(glutin::event::VirtualKeyCode::S as i32) {
                     for (addr,c) in self.obj_set.iter_mut() {
                         if self.selection.contains(addr) {
-                            let mut bank = c[0] >> 5;
-                            bank += 1;
-                            c[0] = (c[0] & 0x1F) | (bank << 5);
+                            let mut t = Terrain::parse(c);
+                            t.meta += 1;
+                            t.meta &= 0x0F;
+                            c[..3].copy_from_slice(&t.ser());
                             self.update = true;
+                        }
+                    }
+                }
+                if ui.is_key_index_pressed(glutin::event::VirtualKeyCode::B as i32) {
+                    for (addr,c) in self.obj_set.iter_mut() {
+                        if self.selection.contains(addr) {
+                            if c.len() >= 4 {
+                                c[3] -= 1;
+                                self.update = true;
+                            }
+                        }
+                    }
+                }
+                if ui.is_key_index_pressed(glutin::event::VirtualKeyCode::N as i32) {
+                    for (addr,c) in self.obj_set.iter_mut() {
+                        if self.selection.contains(addr) {
+                            if c.len() >= 4 {
+                                c[3] += 1;
+                                self.update = true;
+                            }
                         }
                     }
                 }
