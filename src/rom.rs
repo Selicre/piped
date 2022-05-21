@@ -22,3 +22,10 @@ impl Rom {
         (bank << 15 | addr) as _
     }
 }
+
+impl std::ops::Deref for Rom {
+    type Target = [u8];
+    fn deref(&self) -> &[u8] {
+        &self.cart
+    }
+}

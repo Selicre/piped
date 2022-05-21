@@ -4,16 +4,24 @@ use glow::HasContext;
 use crate::draw::GlData;
 use std::collections::HashSet;
 use std::collections::HashMap;
+use std::rc::Rc;
+use std::cell::RefCell;
 
 
 pub struct MainWindow {
+    data: ProjectData,
+    pub gl_data: GlData,
+
     levels: Vec<Level>,
     new: Option<New>,
-    rom: crate::rom::Rom,
-    pub gl_data: GlData,
     proj_view: ProjectView,
     sprmap: SpriteMapEdit,
     help: bool
+}
+
+pub struct ProjectData {
+    focused_level: usize,
+    rom: crate::rom::Rom,
 }
 
 const HELP: &str =
@@ -38,25 +46,32 @@ impl MainWindow {
     pub fn new() -> Self {
         let rom = crate::rom::Rom::new(std::fs::read("SMAS.sfc").unwrap());
         MainWindow {
+            proj_view: ProjectView::new(&rom),
+            data: ProjectData {
+                focused_level: 0,
+                rom,
+            },
+            gl_data: Default::default(),
             levels: vec![],
             new: None,
-            proj_view: ProjectView::new(&rom),
             sprmap: SpriteMapEdit::new(),
-            rom,
-            gl_data: Default::default(),
             help: false,
         }
     }
     pub fn show_window(&mut self, ui: &Ui, gl: &Ctx) -> bool {
         if self.menubar(ui) { return true; }
-        self.sprmap.show(ui,gl, &self.gl_data);
+        if self.sprmap.shown {
+            self.sprmap.show(ui,gl, &self.gl_data);
+        }
         if let Some(c) = self.proj_view.show_window(ui,gl) {
             if true {
                 self.levels.clear();
             }
-            self.levels.push(Level::new(format!("{c:06X?}"), c));
+            self.levels.push(Level::new(format!("{c:06X?}"), c, &mut self.data));
         }
-        self.levels.retain_mut(|c| c.show(ui, gl, &self.gl_data));
+        self.levels.retain_mut(|c| {
+            c.show(ui, gl, &mut self.data, &self.gl_data)
+        });
         if self.help {
             ui.window("Help").opened(&mut self.help).build(|| {
                 ui.text(HELP);
@@ -169,6 +184,7 @@ static mut SPRITE_MAPS: Vec<Vec<[i32;4]>> = vec![];
 static mut SPRITE_MAP_SEL: usize = 0xA5;
 
 pub struct SpriteMapEdit {
+    shown: bool,
     tilemap_id: usize,
     entity_tiles: Vec<[i32;4]>,
     placed: i32,
@@ -197,6 +213,7 @@ impl SpriteMapEdit {
             SPRITE_MAPS = maps;
         }
         Self {
+            shown: false,
             tilemap_id: 0xAB,
             entity_tiles: vec![],
             placed: 0x400,
@@ -492,21 +509,23 @@ pub struct Level {
     blocks: Vec<[i32;4]>,       // tiles actually
     wram: Vec<u8>,
     vram: Vec<u8>,
-    rom: Vec<u8>,
     params: [u32;4],
     update: bool,
+    redraw: bool,
     // 0: terrain, 1: entities
     mode: u32,
     // Block ptrs occupied by terrain IDs (and sizes)
     obj: Vec<(u32, Vec<u32>, usize)>,
     selection: HashSet<u32>,
     drag_delta: [u32;2],
+    drag_delta2: [f32;2],
     // Terrain data
     obj_set: Vec<(u32, Vec<u8>)>,
     // Entity data
     entities: Vec<(u32,[u8;3])>,
     entity_tiles: Vec<[i32;4]>,
     entity_selection: HashSet<u32>,
+    entity_search: String,
     scale: f32,
     placed_obj: String,
     placed_ent: usize,
@@ -520,36 +539,36 @@ fn addr_to_file(addr: u32) -> usize {
     (bank << 15 | addr) as _
 }
 impl Level {
-    pub fn new(name: String, params: [u32;4]) -> Self {
+    pub fn new(name: String, params: [u32;4], data: &mut ProjectData) -> Self {
         //let blocks = blocks.array_chunks::<2>().copied().map(u16::from_le_bytes).collect();
-        let rom = std::fs::read("SMAS.sfc").unwrap();
         let mut this = Level {
-            name, params, rom, update: true, scale: 32.0, ..Default::default()
+            name, params, update: true, scale: 32.0, ..Default::default()
         };
-        this.init_decomp();
+        this.init_decomp(data);
         this
     }
     pub fn load_sublevel(&mut self) {
+        /*
         use std::convert::TryInto;
         let h = self.params[2];
-        let ptr: &[u8;4] = (self.rom[addr_to_file(h)..][..4]).try_into().unwrap();
+        let ptr: &[u8;4] = (data.rom[addr_to_file(h)..][..4]).try_into().unwrap();
         self.params[2] = u32::from_le_bytes(*ptr) & 0xFFFFFF;
-        let ptr: &[u8;4] = (self.rom[addr_to_file(h+3)..][..4]).try_into().unwrap();
+        let ptr: &[u8;4] = (data.rom[addr_to_file(h+3)..][..4]).try_into().unwrap();
         self.params[3] = u32::from_le_bytes(*ptr) & 0xFFFFFF;
         self.params[0] = self.wram[0x1EBA] as _;
         self.params[1] = self.wram[0x1EBA] as _;
         self.selection.clear();
         self.entity_selection.clear();
-        self.init_decomp();
+        self.init_decomp();*/
     }
-    pub fn init_decomp(&mut self) {
-        let (_,_,obj) = crate::emu::render_area(&self.rom, self.params, 1000000, usize::MAX);
+    pub fn init_decomp(&mut self, data: &mut ProjectData) {
+        let (_,_,obj) = crate::emu::render_area(&data.rom, self.params, 1000000, usize::MAX);
         self.obj_set.clear();
         self.entities.clear();
         for (idx,i) in obj.windows(2).enumerate() {
-            self.obj_set.push((idx as _, self.rom[addr_to_file(i[0].0)..addr_to_file(i[1].0)].to_vec()));
+            self.obj_set.push((idx as _, data.rom[addr_to_file(i[0].0)..addr_to_file(i[1].0)].to_vec()));
         }
-        self.entities = self.rom[addr_to_file(self.params[3])+1..]
+        self.entities = data.rom[addr_to_file(self.params[3])+1..]
             .array_chunks::<3>()
             .cloned()
             .take_while(|c| c[0] != 0xFF)
@@ -559,8 +578,8 @@ impl Level {
         self.cur_ent_id = self.entities.len() as _;
         self.cur_obj_id = obj.len() as _;
     }
-    pub fn decompress(&mut self) {
-        let (wram, vram, obj) = crate::emu::render_area_edit(&self.rom, self.params, &self.obj_set, 1000000, usize::MAX);
+    pub fn decompress(&mut self, data: &mut ProjectData) {
+        let (wram, vram, obj) = crate::emu::render_area_edit(&data.rom, self.params, &self.obj_set, 1000000, usize::MAX);
         self.wram = wram; self.vram = vram; self.obj = obj;
 
         for ((_,_,len),(_,e)) in self.obj.iter().zip(self.obj_set.iter_mut()) {
@@ -568,10 +587,10 @@ impl Level {
                 e.resize(*len, 0);
             }
         }
-        self.redraw_objects();
-        self.redraw_entities();
+        self.redraw_objects(data);
+        self.redraw_entities(data);
     }
-    pub fn redraw_entities(&mut self) {
+    pub fn redraw_entities(&mut self, data: &mut ProjectData) {
         let mut blocks = vec![];
         for (i,c) in self.entities.iter() {
             if c[0] == 0xFF { break; }
@@ -581,23 +600,31 @@ impl Level {
             let sel = if self.entity_selection.contains(i) { 1<<16 } else { 0 };
             let sc = self.scale as i32;
             let hsc = sc / 16;
+            let mut a_blocks = vec![];
             for &[tx,ty,t,p] in tilemap.iter() {
-                blocks.push([x*sc+tx*hsc, y*sc+ty*hsc,t,p|sel|(sc/2)]);
+                if sel != 0 && self.drag_delta2 != [0.0;2] {
+                    let d = self.drag_delta2;
+                    blocks.push([x*sc+tx*hsc, y*sc+ty*hsc,0x600,sel|(sc/2)]);
+                    a_blocks.push([x*sc+tx*hsc+d[0] as i32, y*sc+ty*hsc+d[1] as i32,t,p|(sc/2)]);
+                } else {
+                    blocks.push([x*sc+tx*hsc as i32, y*sc+ty*hsc as i32,t,p|sel|(sc/2)]);
+                }
             }
+            blocks.append(&mut a_blocks);
             //ui.set_cursor_pos(cursor);
             //ui.button(format!("{}:{:02X?}",names.lines().nth(c[0] as _).unwrap_or("OOB!"), c));
         }
         self.entity_tiles = blocks;
     }
-    pub fn redraw_objects(&mut self) {
+    pub fn redraw_objects(&mut self, data: &mut ProjectData) {
         let tileset = self.wram[0x70A] as u32;
-        let ptr = u16::from_le_bytes(self.rom[addr_to_file(0x21CE5A + tileset * 2)..][..2].try_into().unwrap()) as u32;
-        let bank = self.rom[addr_to_file(0x21CE80 + tileset)] as u32;
+        let ptr = u16::from_le_bytes(data.rom[addr_to_file(0x21CE5A + tileset * 2)..][..2].try_into().unwrap()) as u32;
+        let bank = data.rom[addr_to_file(0x21CE80 + tileset)] as u32;
 
         let tileset = (bank << 16) | ptr;
         println!("{:06X}", tileset);
 
-        let mappings = &self.rom[addr_to_file(tileset)..];
+        let mappings = &data.rom[addr_to_file(tileset)..];
 
         let tile_size = self.scale as i32 / 2;
 
@@ -614,6 +641,7 @@ impl Level {
             }).collect::<Vec<_>>()
         }).collect::<Vec<_>>();
         let mut blocks = vec![];
+        let mut sel_blocks = vec![];
         let sel = self.get_selection();
         for page in 0..15 {
             for x in 0..16 {
@@ -622,9 +650,14 @@ impl Level {
                     let block_hi = self.wram[0x4000 + page * 0x1B0 + y * 0x10 + x] as usize;
                     let sel = sel.get(&((0x7E2000 + page * 0x1b0 + y * 0x10 + x) as u32));
                     let block = (block_hi << 8) + block_lo;
-                    blocks.extend(block_map.get(block).unwrap_or(&vec![]).iter().cloned().map(|mut c| {
+                    let c = if sel == Some(&0) { &mut sel_blocks } else { &mut blocks };
+                    c.extend(block_map.get(block).unwrap_or(&vec![]).iter().cloned().map(|mut c| {
                         c[0] += (x as i32 * tile_size + page as i32 * 16 * tile_size) * 2;
                         c[1] += (y as i32 * tile_size) * 2;
+                        if sel == Some(&0) {
+                            c[0] += self.drag_delta2[0] as i32;
+                            c[1] += self.drag_delta2[1] as i32;
+                        }
                         match sel {
                             Some(0) => c[3] |= 1<<16,
                             Some(1) => c[3] |= 1<<17,
@@ -635,17 +668,18 @@ impl Level {
                 }
             }
         }
+        blocks.append(&mut sel_blocks);
         self.blocks = blocks;
     }
-    pub fn redraw_mappings(&mut self) {
+    pub fn redraw_mappings(&mut self, data: &mut ProjectData) {
         let tileset = self.wram[0x70A] as u32;
-        let ptr = u16::from_le_bytes(self.rom[addr_to_file(0x21CE5A + tileset * 2)..][..2].try_into().unwrap()) as u32;
-        let bank = self.rom[addr_to_file(0x21CE80 + tileset)] as u32;
+        let ptr = u16::from_le_bytes(data.rom[addr_to_file(0x21CE5A + tileset * 2)..][..2].try_into().unwrap()) as u32;
+        let bank = data.rom[addr_to_file(0x21CE80 + tileset)] as u32;
 
         let tileset = (bank << 16) | ptr;
         println!("{:06X}", tileset);
 
-        let mappings = &self.rom[addr_to_file(tileset)..];
+        let mappings = &data.rom[addr_to_file(tileset)..];
 
         let tile_size = self.scale as i32 / 2;
 
@@ -705,7 +739,7 @@ impl Level {
     pub fn get_obj(&mut self, id: u32) -> &(u32, Vec<u8>) {
         self.obj_set.iter().find(|c| c.0 == id).unwrap()
     }
-    pub fn save(&mut self) {
+    pub fn save(&mut self, data: &mut ProjectData) {
         use std::fmt::Write;
         let mut out = String::new();
         writeln!(out, "; piped level export");
@@ -715,7 +749,7 @@ impl Level {
         write!(out, "\tdb ");
         for i in 0..0x0D {
             // todo: not this
-            write!(out, "${:02X}, ", &self.rom[addr_to_file(self.params[2])+i]);
+            write!(out, "${:02X}, ", &data.rom[addr_to_file(self.params[2])+i]);
         }
         out.pop(); out.pop(); writeln!(out);
         for (i,v) in self.obj_set.iter() {
@@ -733,7 +767,7 @@ impl Level {
         write!(out, "\tdb ");
         for i in 0..1 {
             // todo: not this
-            write!(out, "${:02X}, ", &self.rom[addr_to_file(self.params[3])+i]);
+            write!(out, "${:02X}, ", &data.rom[addr_to_file(self.params[3])+i]);
         }
         out.pop(); out.pop(); writeln!(out);
 
@@ -749,30 +783,36 @@ impl Level {
         writeln!(out);
         std::fs::write("export.asm", &out);
     }
-    pub fn show(&mut self, ui: &Ui, gl: &Ctx, gl_data: &GlData) -> bool {
+    pub fn show(&mut self, ui: &Ui, gl: &Ctx, data: &mut ProjectData, gl_data: &GlData) -> bool {
         if std::mem::take(&mut self.update) {
-            self.decompress();
+            self.decompress(data);
+        }
+        if std::mem::take(&mut self.redraw) {
+            self.redraw_objects(data);
+            self.redraw_entities(data);
         }
         let scale = self.scale;
         let mut close = true;
         let _id = ui.push_id_ptr(self);
         ui.window(format!("Level {}###LevelView", self.name)).horizontal_scrollbar(true).opened(&mut close).build(|| {
+            // TODO: assumes single window active
+            let active = true;
             // middle click pan
-            if ui.is_window_focused() && ui.is_mouse_dragging(imgui::MouseButton::Middle) {
+            if /*ui.is_window_focused_with_flags(imgui::WindowFocusedFlags::CHILD_WINDOWS) &&*/ ui.is_mouse_dragging(imgui::MouseButton::Middle) {
                 ui.set_scroll_x(ui.scroll_x() - ui.io().mouse_delta[0]);
                 ui.set_scroll_y(ui.scroll_y() - ui.io().mouse_delta[1]);
             }
             let offset = ui.cursor_screen_pos();
             let cur = ui.cursor_pos();
-            ui.invisible_button("level", [224.0 * scale, 32.0 * scale]);
+            ui.invisible_button("level", [240.0 * scale, 32.0 * scale]);
             ui.set_item_allow_overlap();
             let edit_ter = ui.is_item_hovered() && self.mode == 0;
             let edit_ent = ui.is_item_hovered() && self.mode == 1;
             ui.set_cursor_pos(cur);
-            if ui.is_item_hovered() && ui.is_key_index_pressed(glutin::event::VirtualKeyCode::C as i32) {
-                self.redraw_mappings();
+            if ui.is_window_focused() && ui.is_key_index_pressed(glutin::event::VirtualKeyCode::C as i32) {
+                self.redraw_mappings(data);
             }
-            if ui.is_item_hovered() && ui.is_key_index_pressed(glutin::event::VirtualKeyCode::V as i32) {
+            if ui.is_window_focused() && ui.is_key_index_pressed(glutin::event::VirtualKeyCode::V as i32) {
                 self.redraw_spr();
             }
             if ui.is_window_focused() && ui.is_key_index_pressed(glutin::event::VirtualKeyCode::D as i32) {
@@ -787,7 +827,7 @@ impl Level {
                 self.update = true;
             }
             if ui.is_window_focused() && ui.is_key_index_pressed(glutin::event::VirtualKeyCode::E as i32) {
-                self.save();
+                self.save(data);
             }
             if ui.is_window_focused() && ui.is_key_index_pressed(glutin::event::VirtualKeyCode::F as i32) {
                 self.load_sublevel();
@@ -814,14 +854,9 @@ impl Level {
             }
             let terrain_text = include_str!("../terrain.txt");
             if self.mode == 0 {
-                let cursor = [cur[0] + ui.scroll_x(), cur[1] + ui.scroll_y()];
-                ui.set_cursor_pos(cursor);
-                ui.group(|| {
-                    ui.text("Editing terrain");
-                    ui.set_next_item_width(200.0);
+                ui.window("Tools").build(|| {
                     ui.input_text("Placed Terrain Data", &mut self.placed_obj).build();
-                    ui.set_next_item_width(200.0);
-                    if let Some(c) = ui.begin_combo_no_preview("Placed Terrain Selector") {
+                    ui.child_window("ToolsTerrain").build(|| {
                         let mut is_meta = false;
                         let mut id = 0;
                         for i in terrain_text.lines() {
@@ -833,29 +868,37 @@ impl Level {
                             }
                             id += 1;
                         }
-                    }
-                    for (i,c) in self.obj_set.iter_mut() {
-                        if self.selection.contains(i) {
-                            ui.text(format!("{} {:02X?}", Terrain::parse(c).show(), &c[3..]));
-                        }
-                    }
+                    });
                 });
-            }
-            let names = include_str!("../sprites.txt");
-            if self.mode == 1 {
                 let cursor = [cur[0] + ui.scroll_x(), cur[1] + ui.scroll_y()];
                 ui.set_cursor_pos(cursor);
-                ui.group(|| {
-                    ui.text("Editing entities");
-                    ui.set_next_item_width(200.0);
-                    //ui.input_text("Placed", &mut self.placed_ent).build();
-                    /*let name = match u8::from_str_radix(&self.placed_ent,16) {
-                        Ok(c) => format!("{c:02X} {}", names.lines().nth(c as _).unwrap_or("OOB")),
-                        Err(e) => format!("{e:?}"),
-                    };*/
-                    ui.combo_simple_string("Placed entity", &mut self.placed_ent,
-                        &names.lines().enumerate().map(|(i,c)| format!("{:02X} {}",i,c)).collect::<Vec<_>>()
-                    );
+                for (i,c) in self.obj_set.iter_mut() {
+                    if self.selection.contains(i) {
+                        ui.text(format!("{} {:02X?}", Terrain::parse(c).show(), &c[3..]));
+                    }
+                }
+            }
+            let names = include_str!("../sprites.txt");
+            if self.mode == 1 && active {
+                //let cursor = [cur[0] + ui.scroll_x(), cur[1] + ui.scroll_y()];
+                //ui.set_cursor_pos(cursor);
+                ui.window("Tools").build(|| {
+                    ui.input_text("Search", &mut self.entity_search).build();
+                    ui.child_window("ToolsEntities").build(|| {
+                        //ui.text("Editing entities");
+                        //ui.set_next_item_width(200.0);
+                        //ui.input_text("Placed", &mut self.placed_ent).build();
+                        /*let name = match u8::from_str_radix(&self.placed_ent,16) {
+                            Ok(c) => format!("{c:02X} {}", names.lines().nth(c as _).unwrap_or("OOB")),
+                            Err(e) => format!("{e:?}"),
+                        };*/
+                        for (i,c) in names.lines().enumerate() {
+                            if !c.is_empty() && !c.to_lowercase().contains(&self.entity_search.to_lowercase()) { continue; }
+                            if ui.selectable_config(format!("{:02X} {}",i,c)).selected(self.placed_ent == i).build() {
+                                self.placed_ent = i;
+                            }
+                        }
+                    });
                     //ui.text(name);
                 });
             }
@@ -901,8 +944,13 @@ impl Level {
                 if ui.is_mouse_dragging(imgui::MouseButton::Left) {
                     let offset_x = sel_x - self.drag_delta[0];
                     let offset_y = sel_y - self.drag_delta[1];
+                    self.drag_delta2[0] += ui.io().mouse_delta[0];
+                    self.drag_delta2[1] += ui.io().mouse_delta[1];
+                    self.redraw = true;
                     if offset_x != 0 || offset_y != 0 {
-                        self.update = true;
+                        self.drag_delta2[0] -= offset_x as i32 as f32 * self.scale;
+                        self.drag_delta2[1] -= offset_y as i32 as f32 * self.scale;
+                        //self.update = true;
                         for (i,c) in self.entities.iter_mut() {
                             if self.entity_selection.contains(i) {
                                 let y = c[2] & 0x1F;
@@ -915,6 +963,8 @@ impl Level {
                             }
                         }
                     }
+                } else {
+                    self.drag_delta2 = [0.0;2];
                 }
                 if ui.is_key_index_pressed(glutin::event::VirtualKeyCode::Delete as i32) {
                     self.entities.retain(|(i,_)| !self.entity_selection.contains(i));
@@ -1087,12 +1137,17 @@ impl Level {
                 if ui.is_mouse_dragging(imgui::MouseButton::Left) {
                     let offset_x = sel_x - self.drag_delta[0];
                     let offset_y = sel_y - self.drag_delta[1];
+                    self.drag_delta2[0] += ui.io().mouse_delta[0];
+                    self.drag_delta2[1] += ui.io().mouse_delta[1];
+                    self.redraw = true;
                     if offset_x != 0 || offset_y != 0 {
+                        self.drag_delta2[0] -= offset_x as i32 as f32 * self.scale;
+                        self.drag_delta2[1] -= offset_y as i32 as f32 * self.scale;
                         self.update = true;
                         for (addr,c,_) in self.obj.iter() {
                             //println!("{:06X?}, {:06X}", self.selection, addr);
                             if self.selection.contains(addr) {
-                                //let c = &mut self.obj_set[*addr as usize];//&mut self.rom[addr_to_file(*addr)..];
+                                //let c = &mut self.obj_set[*addr as usize];//&mut data.rom[addr_to_file(*addr)..];
                                 let c = &mut self.obj_set.iter_mut().find(|c| c.0 == *addr).unwrap().1;
                                 let y = c[0] & 0x1F;
                                 let x = c[1];
@@ -1104,6 +1159,8 @@ impl Level {
                             }
                         }
                     }
+                } else {
+                    self.drag_delta2 = [0.0;2];
                 }
             }
             self.drag_delta = [sel_x, sel_y];
